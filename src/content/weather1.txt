@@ -1,0 +1,17 @@
+id:IDS60902
+name:Sydney (Central Business District)
+state: NSW
+time_zone:AEDT
+lat:-33.9
+lon:151.2
+local_date_time:15/04:10am
+local_date_time_full:20230715161000
+air_temp:20.1
+apparent_t:18.4
+cloud:Clear
+dewpt:11.5
+press:1019.8
+rel_hum:55
+wind_dir:E
+wind_spd_kmh:10
+wind_spd_kt:5

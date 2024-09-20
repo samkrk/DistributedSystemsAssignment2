@@ -1,0 +1,17 @@
+id:IDS60906
+name:Canberra (Parliament House)
+state: ACT
+time_zone:AEST
+lat:-35.3
+lon:149.1
+local_date_time:15/04:03pm
+local_date_time_full:20230715161500
+air_temp:18.6
+apparent_t:17.2
+cloud:Partly cloudy
+dewpt:9.9
+press:1018.7
+rel_hum:60
+wind_dir:N
+wind_spd_kmh:18
+wind_spd_kt:10

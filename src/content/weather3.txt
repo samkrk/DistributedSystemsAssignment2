@@ -1,0 +1,17 @@
+id:IDS60904
+name:Brisbane (Queen Street Mall)
+state: QLD
+time_zone:AEST
+lat:-27.5
+lon:153.0
+local_date_time:15/04:01pm
+local_date_time_full:20230715161300
+air_temp:22.3
+apparent_t:21.0
+cloud:Partly cloudy
+dewpt:14.8
+press:1022.3
+rel_hum:65
+wind_dir:NE
+wind_spd_kmh:12
+wind_spd_kt:6
