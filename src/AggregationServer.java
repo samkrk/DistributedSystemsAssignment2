@@ -23,9 +23,13 @@ public class AggregationServer {
             }
         }).start();
 
+
         int port = 4567; // Port number
+        // get port number if it's there
+
         ServerSocket serverSocket = new ServerSocket(port);
         System.out.println("Aggregation Server started on port " + port);
+        System.out.println("Aggregation Server name: localhost");
 
         while (true) {
             Socket clientSocket = serverSocket.accept();

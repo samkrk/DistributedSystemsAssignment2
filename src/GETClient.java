@@ -11,19 +11,43 @@ public class GETClient {
     public static void main(String[] args) throws IOException {
         LamportClock lamportClock = new LamportClock();  // Starts with clock = 0
 
-        String serverAddress = "localhost"; // Aggregation server address
-        int port = 4567; // Aggregation server port
+        String serverAddress = "localhost";
+        int port = 4567;
+        if (args.length > 0) {
+            String serverInfo = args[0]; // Get the first argument
+            String[] parts = serverInfo.split(":"); // Split by ':'
+
+            if (parts.length == 2) {
+                serverAddress = parts[0]; // server name
+                String p = parts[1]; // port number
+
+                try {
+                    int portNumber = Integer.parseInt(p); // Convert to int
+                    System.out.println("Server Name: " + serverAddress);
+                    System.out.println("Port Number: " + portNumber);
+                } catch (NumberFormatException e) {
+                    System.out.println("Invalid port number. Please provide a valid integer.");
+                }
+            } else {
+                System.out.println("Invalid format. Please use 'servername:portnumber'.");
+                return;
+            }
+        } else {
+            System.out.println("No arguments provided.");
+            return;
+        }
+
         String requested_ID = null;
-        if (args.length > 0){
-            requested_ID = args[0];
+        if (args.length > 1) {
+            requested_ID = args[1];
         }
 
         Socket socket = new Socket(serverAddress, port);
         try (PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
-            lamportClock.increment();  // Increment before sending
-            out.println("LamportClock: " + lamportClock.getClock());  // Send clock value
+            // lamportClock.increment();  // Increment before sending
+            // out.println("LamportClock: " + lamportClock.getClock());  // Send clock value
 
             // Send GET request
             out.println("GET");

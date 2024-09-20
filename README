@@ -1,0 +1,12 @@
+
+Distributed Sytems Assignment 2 - Sam Kirk, a1851921
+
+Easiest to run code using IntelliJ IDEA.
+Compile code using: make compile
+Compile tests using: make compile-tests (tests not yet finished)
+
+Run the Aggregation Server first: make run-server
+Run Content server: make run-content
+Run Client: make run-client
+
+See Makefile for more details.

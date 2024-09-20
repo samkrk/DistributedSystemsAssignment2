@@ -23,9 +23,12 @@ public class ContentServer {
         int port = 4567; // Aggregation server port
         String file;
         if (args.length > 0){
-            file = args[0];
+            serverAddress = args[0];
+            file = args[1];
+            System.out.println("Server address: " + serverAddress);
+            System.out.println("File name: " + file);
         } else {
-            System.out.println("Please specify name of file to send");
+            System.out.println("Please specify server name and name of file to send");
             return;
         }
 
