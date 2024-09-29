@@ -1,85 +1,123 @@
 import java.io.*;
 import java.net.*;
 
-/*
-Extract Server Name and Port Number, Optionally Station ID:
-    Read the server name and port number, and optionally the station ID from input arguments.
-
-*/
-
 public class GETClient {
+    private static LamportClock lamportClock;
+    public static String serverName = "localhost"; // Aggregation server address
+    public static int port = 4567; // Aggregation server port
+    public static String fileID;
+
     public static void main(String[] args) throws IOException {
-        LamportClock lamportClock = new LamportClock();  // Starts with clock = 0
+        lamportClock = new LamportClock();
 
-        String serverAddress = "localhost";
-        int port = 4567;
-        if (args.length > 0) {
-            String serverInfo = args[0]; // Get the first argument
-            String[] parts = serverInfo.split(":"); // Split by ':'
+        // get servername and port number from input
+        initVariables(args);
 
-            if (parts.length == 2) {
-                serverAddress = parts[0]; // server name
-                String p = parts[1]; // port number
+        int maxTries = 3;  // Max number of retry attempts
+        int attempts = 0;  // Track the number of attempts
+        boolean success = false;  // Track whether the operation succeeded
 
-                try {
-                    int portNumber = Integer.parseInt(p); // Convert to int
-                    System.out.println("Server Name: " + serverAddress);
-                    System.out.println("Port Number: " + portNumber);
-                } catch (NumberFormatException e) {
-                    System.out.println("Invalid port number. Please provide a valid integer.");
+        // Retry loop for getting data
+        while (attempts < maxTries && !success) {
+            attempts++;  // Increment attempt count
+
+            try (Socket socket = new Socket(serverName, port);
+                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+
+                // Attempt to get data from the server
+                getData(in, out);
+
+                // Check if getting data succeeded (you can include more checks here)
+                success = true;  // If no exception, assume success
+
+            } catch (IOException e) {
+                System.out.println("Error in socket, attempt " + attempts);
+                e.printStackTrace();
+
+                if (attempts >= maxTries) {
+                    System.out.println("Max retries reached. Unable to get data.");
+                    return;  // Exit or handle failure
+                } else {
+                    System.out.println("Retrying...");
+                    // Optionally wait before retrying
+                    try {
+                        Thread.sleep(1000);  // Wait 1 second before retrying
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();  // Restore interrupt status
+                    }
                 }
-            } else {
-                System.out.println("Invalid format. Please use 'servername:portnumber'.");
+            }
+        }
+
+        if (success) {
+            System.out.println("Data retrieved successfully.");
+        }
+    }
+
+    private static void initVariables(String[] args)throws IOException{
+        int no_id_flag = 0;
+        if (args.length < 2) {
+            if (args.length < 1){
+                System.out.println("Usage: <servername>:<port> <file>");
                 return;
             }
-        } else {
-            System.out.println("No arguments provided.");
+            else { // if client does not specify file id, send the most recent data
+                no_id_flag = 1;
+            }
+        }
+
+        // Get the first argument and split by ':'
+        String serverAndPort = args[0];
+        String[] parts = serverAndPort.split(":");
+
+        if (parts.length != 2) {
+            System.out.println("Invalid format for server and port. Expected format: <servername>:<port>");
             return;
         }
 
-        String requested_ID = null;
-        if (args.length > 1) {
-            requested_ID = args[1];
+        // Extract the server name and port
+        serverName = parts[0];
+        port = Integer.parseInt(parts[1]);
+        if (no_id_flag == 0) {
+            fileID = args[1];
+        }
+        else {
+            fileID = "MOST_RECENT";
         }
 
-        Socket socket = new Socket(serverAddress, port);
-        try (PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-
-            // lamportClock.increment();  // Increment before sending
-            // out.println("LamportClock: " + lamportClock.getClock());  // Send clock value
-
-            // Send GET request
-            out.println("GET");
-            // Send ID only if it exists
-            if (requested_ID != null && !requested_ID.isEmpty()) {
-                out.println(requested_ID);
-            } else {
-                // Send an empty line or some marker to indicate no ID
-                out.println("");
-            }
-
-            // Read response headers
-            StringBuilder responseHeaders = new StringBuilder();
-            String line;
-            while ((line = in.readLine()) != null && !line.isEmpty()) {
-                responseHeaders.append(line).append("\n");
-            }
-
-            // Print headers (optional)
-            // System.out.println("Received Headers: \n" + responseHeaders.toString());
-
-            StringBuilder responseBody = new StringBuilder();
-            char[] buffer = new char[1024];
-            int bytesRead;
-            while ((bytesRead = in.read(buffer)) != -1) {
-                responseBody.append(buffer, 0, bytesRead);
-            }
-
-            // Print body
-            System.out.println(responseBody.toString());
-        } finally {
-            socket.close();
-        }
+        // Print to verify the extracted values
+        System.out.println("Server Name: " + serverName);
+        System.out.println("Port: " + port);
+        System.out.println("File: " + fileID);
     }
+
+    private static void getData(BufferedReader in, PrintWriter out) throws IOException {
+        // Send GET request
+        out.println("GET");
+        // Send ID only if it exists
+        out.println(fileID); // either valid ID or MOST_RECENT
+
+        // Read response headers
+        StringBuilder responseHeaders = new StringBuilder();
+        String line;
+        while ((line = in.readLine()) != null && !line.isEmpty()) {
+            responseHeaders.append(line).append("\n");
+        }
+
+        // Print headers (optional)
+        // System.out.println("Received Headers: \n" + responseHeaders.toString());
+
+        StringBuilder responseBody = new StringBuilder();
+        char[] buffer = new char[1024];
+        int bytesRead;
+        while ((bytesRead = in.read(buffer)) != -1) {
+            responseBody.append(buffer, 0, bytesRead);
+        }
+
+        // Print body
+        System.out.println(responseBody.toString());
+    }
+
 }
+
