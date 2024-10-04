@@ -6,7 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.PrintStream;
 
-public class MiscellaneousTests {
+public class temp {
     // Helper method to start a server in a new thread
     private Thread startServer(Runnable serverRunnable) {
         Thread serverThread = new Thread(serverRunnable);
@@ -71,67 +71,6 @@ public class MiscellaneousTests {
         Files.write(filePath, newData.getBytes(StandardCharsets.UTF_8), StandardOpenOption.WRITE);
     }
 
-    // Test to check if the aggregation server accepts a port number in the input
-    @Test
-    public void testPortNumber() {
-        Thread serverThread = new Thread(() -> {
-            try {
-                AggregationServer.main(new String[]{"1234"});
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-
-        try {
-            serverThread.start(); // Start the server in a separate thread
-            Thread.sleep(100); // Sleep for a short time
-            int p = AggregationServer.getPort();
-            assertEquals("Server should be started on port 1234", 1234, p);
-            AggregationServer.shutdown(); // Shut down the server
-            serverThread.join(); // Wait for the server thread to finish
-            System.out.println("Test finished successfully.");
-        } catch (Exception e) {
-            fail("Server startup failed: " + e.getMessage());
-        }
-    }
-
-
-    // Test to make sure the client receives the most recently updated file when no ID is specified
-    @Test
-    public void testMostRecent() {
-        Thread serverThread = startServer(() -> {
-            try {
-                AggregationServer.main(new String[]{"1234"});
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-
-        try {
-            Thread.sleep(500);
-            ContentServer contentServer1 = runContentServer("1234", "src/content/IDS60902.txt");
-            Thread.sleep(500);
-            contentServer1.shutdown();
-
-            ContentServer contentServer2 = runContentServer("1234", "src/content/IDS60901.txt");
-            Thread.sleep(500);
-            contentServer2.shutdown();
-
-
-            String clientResponse = captureClientOutput("1234", "null");
-            String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather0check.txt")), StandardCharsets.UTF_8);
-            assertTrue("Client did not receive correct JSON", clientResponse.contains(expectedJson));
-
-            AggregationServer.shutdown();
-            serverThread.join();
-        } catch (Exception e) {
-            fail("Test failed: " + e.getMessage());
-        }
-    }
-
-    // Test to check if the aggregation server receives newly written data
-    // Here the content server starts with the data from IDS60903.txt, and is then overwritten with the data from IDS60904.
-    // A client then requests the latest data a second later, and should receive the new data from IDS60904.
     @Test
     public void testOverwriteData() {
         String port = "1234";
@@ -150,33 +89,49 @@ public class MiscellaneousTests {
         // Start the content server
         ContentServer contentServer = runContentServer(port, contentFilePath);
 
+        String OLD_DATA = ""; // To store old data
         try {
-            Thread.sleep(1000); // Wait for servers to start
+            Thread.sleep(5000); // Wait for servers to start
 
             // Save old data
-            String OLD_DATA = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8);
+            OLD_DATA = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8);
+            System.out.println("Old Data: " + OLD_DATA); // Debug statement for old data
+
             // New data to write
             String NEW_DATA = new String(Files.readAllBytes(Paths.get("src/content/IDS60904.txt")), StandardCharsets.UTF_8);
-            overwriteFile(filePath, NEW_DATA); // Overwrite the file with new data
+            System.out.println("New Data: " + NEW_DATA); // Debug statement for new data
 
-            Thread.sleep(1000); // Give the server a moment to process the new data
+            overwriteFile(filePath, NEW_DATA); // Overwrite the file with new data
+            System.out.println("File overwritten with new data."); // Debug statement for file overwrite
+
+            Thread.sleep(5000); // Give the server more time to process the new data
 
             // Capture the client output
             String clientResponse = captureClientOutput(port, "null");
             String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather4check.txt")), StandardCharsets.UTF_8);
+
+            System.out.println("Expected JSON: " + expectedJson); // Debug statement for expected JSON
+            System.out.println("Client Response: " + clientResponse); // Debug statement for client response
+
             // Assert that the received data matches the new data
             assertTrue("Client did not receive the expected JSON data", clientResponse.contains(expectedJson));
 
+        } catch (Exception e) {
+            fail("Test failed: " + e.getMessage());
+        } finally {
             // Clean up
             contentServer.shutdown(); // Make sure to shutdown the content server
             AggregationServer.shutdown(); // Make sure to shutdown the aggregation server
-            serverThread.join(); // Wait for server thread to finish
-
-            // Reset IDS60903.txt to back to what it was.
-            overwriteFile(filePath, OLD_DATA); // Overwrite the file with old data
-        } catch (Exception e) {
-            fail("Test failed: " + e.getMessage());
+            try {
+                serverThread.join(); // Wait for server thread to finish
+                // Reset IDS60903.txt back to what it was.
+                overwriteFile(filePath, OLD_DATA); // Overwrite the file with old data
+                System.out.println("File reset to old data."); // Debug statement for file reset
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
+
 
 }

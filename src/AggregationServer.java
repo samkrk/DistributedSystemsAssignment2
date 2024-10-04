@@ -12,11 +12,14 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class AggregationServer {
     private static volatile boolean running = false; // Flag to control server running state
     public static LamportClock lamportClock;
     private static ServerSocket serverSocket;
+    private static ExecutorService threadPool;
     public static int port;
     public static final Map<String, Long> lastContactMap = new ConcurrentHashMap<>();
     public static final long INACTIVITY_THRESHOLD = 30000; // 30 seconds
@@ -35,6 +38,7 @@ public class AggregationServer {
         port = getPortNumber(args); // get port number from input
         startShutdownListener();
         startSocket(port); // start socket on given port number
+        threadPool = Executors.newCachedThreadPool();  // Use a thread pool to manage clients
     }
 
     public static int getPortNumber(String[] args) {
@@ -105,55 +109,57 @@ public class AggregationServer {
 
         while (running) {
             try {
+                // Accept will block, but when serverSocket is closed, it throws an exception.
                 Socket clientSocket = serverSocket.accept();
-                // System.out.println("New client connected");
-                new Thread(new ClientHandler(clientSocket)).start();
+                if (!running) {
+                    break;
+                }
+                threadPool.submit(new ClientHandler(clientSocket));
             } catch (IOException e) {
                 if (!running) {
-                    break; // Exit the loop if server is shutting down
+                    break; // Exit the loop if the server is shutting down
                 }
-                e.printStackTrace();
+                e.printStackTrace(); // Handle other IOExceptions
             }
         }
     }
 
+    // Start a shutdown listener to wait for the "shutdown" command
     private static void startShutdownListener() {
-        // Start a new thread to listen for shutdown command
         new Thread(() -> {
             Scanner scanner = new Scanner(System.in);
             while (running) {
                 String input = scanner.nextLine();
                 if (input.equalsIgnoreCase("shutdown")) {
                     running = false;
-                    System.out.println("Shutting down the server...");
+                    shutdown();
                 }
             }
             scanner.close();
-            try {
-                if (serverSocket != null && !serverSocket.isClosed()) {
-                    serverSocket.close(); // Close the server socket
-                }
-                System.out.println("Server has been shut down.");
-            } catch (IOException e) {
-                System.out.println("Error while shutting down the server.");
-                e.printStackTrace();
-            }
         }).start();
     }
 
+    // Gracefully shut down the server
     public static void shutdown() {
-        running = false; // Stop the server loop
         System.out.println("Shutting down the server...");
+        running = false;
 
+        // Stop accepting new clients
         try {
             if (serverSocket != null && !serverSocket.isClosed()) {
-                serverSocket.close(); // Close the server socket
+                serverSocket.close();
             }
-            System.out.println("Server has been shut down.");
         } catch (IOException e) {
-            System.out.println("Error while shutting down the server.");
+            System.out.println("Error while closing the server socket.");
             e.printStackTrace();
         }
+
+        // Shutdown the client handler threads
+        if (threadPool != null && !threadPool.isShutdown()) {
+            threadPool.shutdownNow();  // Immediately stop all threads
+        }
+
+        System.out.println("Server has been shut down.");
     }
 
     public static int getClock(){
@@ -174,11 +180,18 @@ class ClientHandler extends AggregationServer implements Runnable{
     public void run() {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
              PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+
             // Increment clock on request receipt
             AggregationServer.lamportClock.increment();
 
             // get request type
             String requestType = in.readLine();
+
+            // Check if the input is null or invalid (this happens when we trigger shutdown)
+            if (requestType == null || requestType.trim().isEmpty()) {
+                System.out.println("Received invalid or null input. Closing client connection.");
+                return; // Exit the handler gracefully
+            }
 
             if (requestType.equals("PUT")) {
                 System.out.println("Request type: PUT");
@@ -194,6 +207,15 @@ class ClientHandler extends AggregationServer implements Runnable{
 
         } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+            try {
+                if (clientSocket != null && !clientSocket.isClosed()) {
+                    clientSocket.close(); // Ensure the client socket is closed
+                }
+            } catch (IOException e) {
+                System.out.println("Error closing client socket.");
+                e.printStackTrace();
+            }
         }
     }
 

@@ -1,0 +1,18 @@
+{
+  "apparent_t": "21.0",
+  "wind_spd_kmh": "12",
+  "rel_hum": "65",
+  "lon": "153.0",
+  "dewpt": "14.8",
+  "wind_spd_kt": "6",
+  "wind_dir": "NE",
+  "time_zone": "AEST",
+  "air_temp": "22.3",
+  "cloud": "Partly cloudy",
+  "local_date_time_full": "20230715161300",
+  "name": "Brisbane (Queen Street Mall)",
+  "id": "IDS60904",
+  "state": "QLD",
+  "press": "1022.3",
+  "lat": "-27.5"
+}

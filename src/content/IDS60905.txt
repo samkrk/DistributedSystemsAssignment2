@@ -1,0 +1,17 @@
+id:IDS60905
+name:Perth (Hay Street)
+state: WA
+time_zone:AWST
+lat:-31.8
+lon:115.9
+local_date_time:15/04:02pm
+local_date_time_full:20230715161400
+air_temp:24.0
+apparent_t:23.1
+cloud:Clear
+dewpt:17.3
+press:1017.0
+rel_hum:58
+wind_dir:NW
+wind_spd_kmh:25
+wind_spd_kt:14
