@@ -1,13 +1,68 @@
 
-Distributed Sytems Assignment 2 - Sam Kirk, a1851921
+# Distributed Systems Assignment 2 
+## Sam Kirk, a1851921
 
-Easiest to run code using IntelliJ IDEA.
-Compile code using: make compile
-Compile tests using: make compile-tests (tests not yet finished)
+---
+## Overview 
+This assignment uses a RESTful API which aggregates weather data from content servers and serves the data to clients who request it. There are three main components to the system, the Aggregation Server, the Content Servers, and the GET Clients.
 
-Run the Aggregation Server first: make run-server
-Run Content server: make run-content
-Run Client: make run-client
+### Aggregation Server
+___
+The Aggregation server starts up, receives weather data in a JSON format from the content servers, and waits to serve client requests and content server updates. Upon initialisation, a port number can be specified for the server to listen on. 
+
+Key features:
+* Supports an arbitrary port number.
+* Removes content servers that have not contacted the aggregation server in 30 seconds. 
+* Uses threads to process GET and PUT requests concurrently.
+* Makes use of lamport clocks to maintain ordering of events.
+* Robust error handling for network errors and invalid input. 
+* Can be shutdown by entering 'shutdown' in the terminal. 
+
+### Content Servers 
+
+---
+Each content server corresponds to a unique station ID. Upon initialisation, the content server is given the aggregation server and port number, along with the file name which will be converted to JSON format and sent to the aggregation server. 
+
+Key features: 
+* Uses the manual JSON parser, 'JSONParser' class to convert the txt file into JSON. 
+* Sends 'heartbeat' messages to the aggregation server to ensure constant connection. 
+* Robust error handling for invalid arguments, parsing errors and network errors. 
+* Retries sending data to the aggregation server 3 times before giving up. 
+* Implements lamport clocks.
+* Can be shutdown gracefully by typing 'shutdown' into terminal. 
+
+Note that each content server should be run in its own terminal. 
+### GET Clients 
+
+--- 
+The GET Clients take either one or two parameters. The first parameter is the aggregation server name and port number, so the same as the Content Servers, and the second optional parameter is the file ID which corresponds to the weather data they want to view. A successful request will result in the weather data being printed in the terminal. 
+
+### Look at this line 
+In the case where no ID is specified, the client will receive all of the data currently cached in the Aggregation Server.
+
+Key features: 
+* Retries 3 times on failures.
+* Error handling for socket/network failures and argument errors. 
+* Prints JSON data directly to terminal. 
+ 
+--- 
+## Build Instructions 
+ ___For everything to run smoothly, please use IntelliJ IDEA.___
+
+To run each component individually; 
+* Compile 
+> make compile 
+* Start the Aggregation server
+> make run-server 
+* Start the Content server
+> make run-client SERVER_ADDR=localhost PORT=4567 ID=IDS60901
+* Request this file with the GET client (with ID corresponding to what you just uploaded)
+> make run-client SERVER_ADDR=localhost PORT=4567 ID=IDS60901 
+
+## Test Instructions 
+To compile and run all the tests, run 
+
+> make run-tests
 
 See Makefile for more details.
 

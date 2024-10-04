@@ -3,19 +3,28 @@ import java.net.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 import java.nio.charset.StandardCharsets;
-import java.util.Scanner;
+import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.*;
 
 public class AggregationServer {
     private static volatile boolean running = false; // Flag to control server running state
-    private static LamportClock lamportClock;
+    public static LamportClock lamportClock;
     private static ServerSocket serverSocket;
     public static int port;
+    public static final Map<String, Long> lastContactMap = new ConcurrentHashMap<>();
+    public static final long INACTIVITY_THRESHOLD = 30000; // 30 seconds
+
 
     public static void main(String[] args){
         startUp(args);
+        startFileCleanupThread(); // start clean up
         running = true;
         listen(serverSocket);
     }
@@ -24,9 +33,8 @@ public class AggregationServer {
         System.out.println("Server is starting up...");
         lamportClock = new LamportClock();  // Starts with clock = 0
         port = getPortNumber(args); // get port number from input
-        startFileCleanupThread(); // start clean up
+        startShutdownListener();
         startSocket(port); // start socket on given port number
-        return;
     }
 
     public static int getPortNumber(String[] args) {
@@ -49,17 +57,20 @@ public class AggregationServer {
         long thresholdTime = System.currentTimeMillis() - TimeUnit.SECONDS.toMillis(timeLimitInSeconds);
 
         Files.list(directory).forEach(file -> {
-            try {
-                BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
-                Instant lastAccessTime = attrs.lastAccessTime().toInstant();
+            String fileName = file.getFileName().toString();
+            String fileId = fileName.substring(0, fileName.indexOf('.')); // Assuming fileId is part of the file name
 
-                if (lastAccessTime.toEpochMilli() < thresholdTime) {
+            Long lastContactTime = lastContactMap.get(fileId);
+            if (lastContactTime == null || lastContactTime < thresholdTime) {
+                // If no heartbeat has been received within the time limit, delete the file
+                try {
                     Files.delete(file);
-                    System.out.println("Deleted file: " + file.getFileName());
+                    System.out.println("Deleted inactive server file: " + file.getFileName());
+                    lastContactMap.remove(fileId); // Also remove the file from the map
+                } catch (IOException e) {
+                    System.err.println("Error deleting file: " + file.getFileName());
+                    e.printStackTrace();
                 }
-            } catch (IOException e) {
-                System.err.println("Error processing file: " + file.getFileName());
-                e.printStackTrace();
             }
         });
     }
@@ -68,7 +79,7 @@ public class AggregationServer {
         new Thread(() -> {
             while (running) {
                 try {
-                    cleanUpFiles(30); // Clean files not accessed for 30 seconds
+                    cleanUpFiles(30); // Clean up files not accessed for 30 seconds
                     TimeUnit.SECONDS.sleep(30); // Sleep for 30 seconds before running again
                 } catch (InterruptedException | IOException e) {
                     e.printStackTrace();
@@ -81,11 +92,9 @@ public class AggregationServer {
         try {
             serverSocket = new ServerSocket(port);
             System.out.println("Aggregation Server started on port " + port);
-            return; // Return the created server socket
         } catch (IOException e) {
             System.out.println("Error while creating server socket on port " + port);
             e.printStackTrace();
-            return; // Return null if socket creation fails
         }
     }
 
@@ -97,7 +106,7 @@ public class AggregationServer {
         while (running) {
             try {
                 Socket clientSocket = serverSocket.accept();
-                System.out.println("New client connected");
+                // System.out.println("New client connected");
                 new Thread(new ClientHandler(clientSocket)).start();
             } catch (IOException e) {
                 if (!running) {
@@ -108,13 +117,34 @@ public class AggregationServer {
         }
     }
 
-    public static void shutdown(){
-        running = false;
-        shutdown(serverSocket);
+    private static void startShutdownListener() {
+        // Start a new thread to listen for shutdown command
+        new Thread(() -> {
+            Scanner scanner = new Scanner(System.in);
+            while (running) {
+                String input = scanner.nextLine();
+                if (input.equalsIgnoreCase("shutdown")) {
+                    running = false;
+                    System.out.println("Shutting down the server...");
+                }
+            }
+            scanner.close();
+            try {
+                if (serverSocket != null && !serverSocket.isClosed()) {
+                    serverSocket.close(); // Close the server socket
+                }
+                System.out.println("Server has been shut down.");
+            } catch (IOException e) {
+                System.out.println("Error while shutting down the server.");
+                e.printStackTrace();
+            }
+        }).start();
     }
 
-    public static void shutdown(ServerSocket serverSocket){
+    public static void shutdown() {
+        running = false; // Stop the server loop
         System.out.println("Shutting down the server...");
+
         try {
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close(); // Close the server socket
@@ -130,11 +160,12 @@ public class AggregationServer {
         return lamportClock.getClock();
     }
 
+
 } // Aggregation Server
 
 
-class ClientHandler implements Runnable{
-    private Socket clientSocket;
+class ClientHandler extends AggregationServer implements Runnable{
+    private final Socket clientSocket;
     public ClientHandler(Socket clientSocket) {
         this.clientSocket = clientSocket;
     }
@@ -143,34 +174,43 @@ class ClientHandler implements Runnable{
     public void run() {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
              PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+            // Increment clock on request receipt
+            AggregationServer.lamportClock.increment();
 
             // get request type
             String requestType = in.readLine();
-            System.out.println("Request type: " + requestType);
 
             if (requestType.equals("PUT")) {
+                System.out.println("Request type: PUT");
                 processPut(in, out);
             } else if (requestType.equals("GET")) {
+                System.out.println("Request type: GET");
                 processGet(in, out);
-            }
-            else {
+            } else if (requestType.equals("HEARTBEAT")) {
+                processHeartbeat(in, out);
+            } else {
                 out.println("HTTP/1.1 400 Invalid request type");
             }
 
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
     public void processPut(BufferedReader in, PrintWriter out) throws IOException {
+        // Read lamport clock value from content server
+        String receivedClockString = in.readLine();
+        int receivedClock = Integer.parseInt(receivedClockString);
+        AggregationServer.lamportClock.update(receivedClock);
+
         // Read & print headers
         StringBuilder responseHeaders = readHeaders(in);
-        System.out.println(responseHeaders.toString());
+        System.out.println(responseHeaders);
 
         // read & print json data
         String jsonString = readJson(in);
         System.out.println("Received JSON data: " + jsonString);
+        System.out.println("Lamport Clock before processing PUT: " + AggregationServer.lamportClock.getClock());
 
         // if json data is empty
         if (jsonString.isEmpty()){
@@ -189,43 +229,66 @@ class ClientHandler implements Runnable{
             // Store the data in a file named after the weather ID
             Path filePath = Paths.get("src/aggr_data/" + weatherID + ".json");
 
+            long timestamp = System.currentTimeMillis(); // Use current time as the timestamp
+            lastContactMap.put(weatherID, timestamp);
+
             // Send success response (HTTP 201 for new, HTTP 200 for update)
             if (!Files.exists(filePath)) {
-                // File does not exist yet, so create it and return 201 Created
-                Files.write(filePath, jsonString.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE);
+                // Create the file and write content
+                Files.writeString(filePath, jsonString, StandardOpenOption.CREATE);
                 out.println("HTTP/1.1 201 Created");
-                out.println(); // End of headers
-                out.println(jsonString);
-                out.println(); // End of message
             } else {
-                // File already exists, update its contents and return 200 OK
-                Files.write(filePath, jsonString.getBytes(StandardCharsets.UTF_8), StandardOpenOption.TRUNCATE_EXISTING);
+                // File already exists, update its content
+                Files.writeString(filePath, jsonString, StandardOpenOption.TRUNCATE_EXISTING);
                 out.println("HTTP/1.1 200 OK");
-                out.println(); // End of headers
-                out.println(jsonString);
-                out.println(); // End of message
             }
+
+            out.println(); // End of headers
+            out.println(jsonString); // Send back the JSON data
+            out.flush();  // Ensure all the output is flushed
         } catch (Exception e) {
             // Handle JSON parsing error or invalid format
             System.out.println("Invalid JSON format");
             out.println("HTTP/1.1 500 Internal Server Error");
         }
-        // Handle Lamport clock logic here
+        AggregationServer.lamportClock.increment(); // Increment clock after processing PUT
     }
 
     public void processGet(BufferedReader in, PrintWriter out) throws IOException {
+        // Read lamport clock value from content server
+        String receivedClockString = in.readLine();
+        int receivedClock = Integer.parseInt(receivedClockString);
+        AggregationServer.lamportClock.update(receivedClock);
+
         // if no ID specified, return latest data
         String id = in.readLine();
         System.out.println("ID: " + id);
-        if (id.equals("MOST_RECENT")){ // Send all weather data?
-            String jsonResponse = "{ \"weather\": \"Sunny\" }"; // Example response
-            // Send the JSON data to the client
-            out.println("HTTP/1.1 200 OK");
-            out.println("Content-Type: application/json");
-            out.println("Content-Length: " + jsonResponse.length());
-            out.println("No ID Specified. Sending Most Recent Data");
+        System.out.println("Lamport Clock before processing GET: " + AggregationServer.lamportClock.getClock());
+
+        if (id.equals("MOST_RECENT")){ // Send the most recently updated weather file
+            String most_recent_file = getMostRecentFileId();
+            Path filePath = Paths.get("src/aggr_data/" + most_recent_file + ".json");
+            System.out.println(most_recent_file);
+
+            String jsonResponse;
+
+            if (most_recent_file.equals("empty") || !Files.exists(filePath)) {
+                // If the aggregation server is empty, send a 404 Not Found response
+                jsonResponse = "{\"error\": \"No data in aggregation server\"}";
+                out.println("HTTP/1.1 404 Not Found");
+                out.println("Content-Type: application/json");
+
+            } else {
+                jsonResponse = Files.readString(filePath);
+                System.out.println("Sending JSON Data associated with ID :" + id);
+                // Send the JSON data to the client
+                out.println("HTTP/1.1 200 OK");
+                out.println("Content-Type: application/json");
+                out.println("Content-Length: " + jsonResponse.length());
+                out.println("No ID Specified. Sending Most Recent Data");
+            }
             out.println(); // End of headers
-            out.println(jsonResponse); // Send the JSON data
+            out.println(jsonResponse);
             out.println(); // End of message
         } else {
             // Retrieve stored JSON data WITH ID
@@ -239,22 +302,47 @@ class ClientHandler implements Runnable{
                 jsonResponse = "{\"error\": \"Not Found\"}";
                 out.println("HTTP/1.1 404 Not Found");
                 out.println("Content-Type: application/json");
-                out.println(); // End of headers
-                out.println(jsonResponse); // Send the error message
-                out.println(); // End of message
             } else {
                 // Read the contents of the JSON file
-                jsonResponse = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8);
-                System.out.println("Sending JSON Data:" + jsonResponse);
+                jsonResponse = Files.readString(filePath);
+                System.out.println("Sending JSON Data associated with ID :" + id);
                 // Send the JSON data to the client
                 out.println("HTTP/1.1 200 OK");
                 out.println("Content-Type: application/json");
                 out.println("Content-Length: " + jsonResponse.length());
-                out.println(); // End of headers
-                out.println(jsonResponse); // Send the JSON data
-                out.println(); // End of message
             }
+            out.println(); // End of headers
+            out.println(jsonResponse);
+            out.println(); // End of message
         }
+        AggregationServer.lamportClock.increment(); // Increment clock after processing GET
+    }
+
+    public static String getMostRecentFileId() {
+        if (lastContactMap.isEmpty()){
+            System.out.println("No files currently in aggregation server");
+            return "empty";
+        }
+        return lastContactMap.entrySet()
+                .stream()
+                .max(Map.Entry.comparingByValue()) // Get the entry with the highest contact time (most recent)
+                .map(Map.Entry::getKey) // Extract the key (fileId)
+                .orElse("empty"); // Return empty if the map is empty
+    }
+
+    private void processHeartbeat(BufferedReader in, PrintWriter out) throws IOException {
+        String filePath = in.readLine(); // Read the attached file ID
+        int startIndex = filePath.lastIndexOf('/') + 1; // Start after the last '/'
+        int endIndex = filePath.lastIndexOf('.'); // End before the '.txt'
+        String fileId = filePath.substring(startIndex, endIndex);
+
+        long timestamp = System.currentTimeMillis(); // Use current time as the timestamp
+
+        lastContactMap.put(fileId, timestamp);
+
+        // Respond with acknowledgment
+        out.println("HTTP/1.1 200 OK");
+        System.out.println("Received heartbeat from " + fileId);
     }
 
     private StringBuilder readHeaders(BufferedReader in) throws IOException {
@@ -286,7 +374,7 @@ class ClientHandler implements Runnable{
         if (idIndex != -1) {
             int startIndex = jsonString.indexOf("\"", idIndex + 5) + 1; // Skip past "id": "
             int endIndex = jsonString.indexOf("\"", startIndex); // Find the closing quote
-            if (startIndex != -1 && endIndex != -1) {
+            if (endIndex != -1) {
                 weatherID = jsonString.substring(startIndex, endIndex); // Extract the ID value
             }
         }

@@ -6,6 +6,7 @@ public class GETClient {
     public static String serverName = "localhost"; // Aggregation server address
     public static int port = 4567; // Aggregation server port
     public static String fileID;
+    public static String receivedData = "EMPTY";
 
     public static void main(String[] args) throws IOException {
         lamportClock = new LamportClock();
@@ -49,10 +50,7 @@ public class GETClient {
                 }
             }
         }
-
-        if (success) {
-            System.out.println("Data retrieved successfully.");
-        }
+        System.out.println("Data retrieved successfully.");
     }
 
     private static void initVariables(String[] args)throws IOException{
@@ -60,7 +58,7 @@ public class GETClient {
         if (args.length < 2) {
             if (args.length < 1){
                 System.out.println("Usage: <servername>:<port> <file>");
-                return;
+                throw new IOException();
             }
             else { // if client does not specify file id, send the most recent data
                 no_id_flag = 1;
@@ -93,9 +91,12 @@ public class GETClient {
     }
 
     private static void getData(BufferedReader in, PrintWriter out) throws IOException {
-        // Send GET request
+        // update clock
+        lamportClock.increment();
+
+        // Send GET request, lamport clock value, and id
         out.println("GET");
-        // Send ID only if it exists
+        out.println(lamportClock.getClock());
         out.println(fileID); // either valid ID or MOST_RECENT
 
         // Read response headers
@@ -106,7 +107,7 @@ public class GETClient {
         }
 
         // Print headers (optional)
-        // System.out.println("Received Headers: \n" + responseHeaders.toString());
+        System.out.println("Received Headers: \n" + responseHeaders);
 
         StringBuilder responseBody = new StringBuilder();
         char[] buffer = new char[1024];
@@ -115,8 +116,8 @@ public class GETClient {
             responseBody.append(buffer, 0, bytesRead);
         }
 
-        // Print body
-        System.out.println(responseBody.toString());
+        receivedData = responseBody.toString();
+        System.out.println(receivedData);
     }
 
 }
