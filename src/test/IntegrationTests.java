@@ -1,14 +1,14 @@
-package test;
 
-import main.AggregationServer;
-import main.ContentServer;
-import main.GETClient;
+import org.junit.Assert;
 import org.junit.Test;
 import static org.junit.Assert.*;
+
+import java.io.*;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class IntegrationTests {
 
@@ -64,6 +64,62 @@ public class IntegrationTests {
         return clientResponse.toString();
     }
 
+    // Helper method to run a GET client and capture output in a thread-safe manner
+    private String captureClientOutputThreadSafe(String port, String id) {
+        try {
+            PipedOutputStream pipedOut = new PipedOutputStream();
+            PipedInputStream pipedIn = new PipedInputStream(pipedOut);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();  // Stream to capture output
+
+            Thread clientThread = new Thread(() -> {
+                try {
+                    PrintStream originalOut = System.out;
+                    PrintStream ps = new PrintStream(pipedOut);  // Custom output stream
+                    System.setOut(ps);  // Redirect System.out to this thread's output stream
+
+                    // Run the GET client
+                    GETClient.main(new String[]{"localhost:" + port, id});
+
+                    // Close custom PrintStream
+                    ps.flush();
+                    ps.close();
+
+                    // Reset System.out
+                    System.setOut(originalOut);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+
+            clientThread.start();
+            clientThread.join();  // Ensure the client thread finishes
+
+            // Read captured output into baos
+            int data;
+            while ((data = pipedIn.read()) != -1) {
+                baos.write(data);
+            }
+            pipedIn.close();
+
+            // Convert the captured output to a string and return it
+            return baos.toString().trim();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+
+
+    // Helper function for starting the aggregation server and ensuring no errors.
+    private void waitForServerToStart() {
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
     // Basic start up and shut-down test
     @Test
     public void testServerStartup() {
@@ -98,13 +154,13 @@ public class IntegrationTests {
 
         try {
             Thread.sleep(1000);
-            Thread contentThread = runContentServer("1236", "src/content/IDS60901.txt");
+            Thread contentThread = runContentServer("1236", "src/main/content/IDS60901.txt");
             Thread.sleep(1000);
             ContentServer.shutdown();
             contentThread.join();
 
-            Assert.assertTrue("The JSON file should be created", Files.exists(Paths.get("src/aggr_data/IDS60901.json")));
-            assertFileContent(Paths.get("src/aggr_data/IDS60901.json"), Paths.get("tests/weather0check.txt"));
+            Assert.assertTrue("The JSON file should be created", Files.exists(Paths.get("src/main/aggr_data/IDS60901.json")));
+            assertFileContent(Paths.get("src/main/aggr_data/IDS60901.json"), Paths.get("src/test/weather0check.txt"));
 
             AggregationServer.shutdown();
             serverThread.join();
@@ -126,13 +182,13 @@ public class IntegrationTests {
 
         try {
             Thread.sleep(500);
-            Thread contentThread = runContentServer("1234", "src/content/IDS60901.txt");
+            Thread contentThread = runContentServer("1234", "src/main/content/IDS60901.txt");
             Thread.sleep(500);
             ContentServer.shutdown();
             contentThread.join();
 
             String clientResponse = captureClientOutput("1234", "IDS60901");
-            String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather0check.txt")), StandardCharsets.UTF_8);
+            String expectedJson = new String(Files.readAllBytes(Paths.get("src/test/weather0check.txt")), StandardCharsets.UTF_8);
             Assert.assertTrue("Client did not receive correct JSON", clientResponse.contains(expectedJson));
 
             AggregationServer.shutdown();
@@ -142,68 +198,70 @@ public class IntegrationTests {
         }
     }
 
-    // Test multiple concurrent GET requests
-    /*
+    // Test concurrent GET requests
     @Test
-    public void testMultipleGets() {
-        Thread serverThread = startServer(() -> {
-            try {
-                AggregationServer.main(new String[]{"1233"});
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+    public void testConcurrentGets() throws InterruptedException, IOException {
+        String port = "1235";
+
+        // Start the aggregation server
+        Thread serverThread = new Thread(() -> AggregationServer.main(new String[]{port}));
+        serverThread.start();
+        waitForServerToStart();  // Wait for the server to be fully up and running
+
+        // List to store client results
+        List<String> clientResponses = Collections.synchronizedList(new ArrayList<>());
+
+        // Define threads for multiple clients
+        Thread client1 = new Thread(() -> {
+            String response = captureClientOutputThreadSafe(port, "IDS60901");
+            clientResponses.add(response);
         });
 
-        try {
-            Thread.sleep(500); // Wait for server to start
-
-            // Start content server to seed data
-            Thread contentThread = runContentServer("1233", "src/content/IDS60901.txt");
-            Thread.sleep(500); // Wait for content server to finish seeding data
-            ContentServer.shutdown();
-            contentThread.join(); // Wait for content server to finish
-
-            // Prepare for multiple client requests
-            int numClients = 1; // Number of concurrent clients
-            List<Thread> clientThreads = new ArrayList<>();
-            List<String> clientResponses = Collections.synchronizedList(new ArrayList<>());
-
-            // Start multiple client threads
-            for (int i = 0; i < numClients; i++) {
-                Thread clientThread = new Thread(() -> {
-                    try {
-                        String clientResponse = captureClientOutput("1233", "IDS60901");
-                        clientResponses.add(clientResponse); // Store response
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-                clientThreads.add(clientThread);
-                clientThread.start();
+        Thread client2 = new Thread(() -> {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
+            String response = captureClientOutputThreadSafe(port, "IDS60901");
+            clientResponses.add(response);
+        });
 
-            // Wait for all client threads to complete
-            for (Thread clientThread : clientThreads) {
-                clientThread.join();
+        Thread client3 = new Thread(() -> {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
+            String response = captureClientOutputThreadSafe(port, "IDS60901");
+            clientResponses.add(response);
+        });
 
-            // Expected JSON content
-            String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather0check.txt")), StandardCharsets.UTF_8);
+        // Start the client threads
+        client1.start();
+        client2.start();
+        client3.start();
 
-            // Verify each client's response contains the correct JSON
-            for (String response : clientResponses) {
-                assertTrue("Client did not receive correct JSON", response.contains(expectedJson));
-            }
+        // Wait for all clients to finish
+        client1.join(5000);
+        client2.join(5000);
+        client3.join(5000);
 
-            // Shutdown the aggregation server
-            AggregationServer.shutdown();
-            serverThread.join(); // Wait for the server to finish
-        } catch (Exception e) {
-            fail("Test failed: " + e.getMessage());
+        // Shutdown the server
+        AggregationServer.shutdown();
+        serverThread.join();
+
+        // Check that the responses are as expected
+        String expectedJson = Files.readString(Paths.get("src/test/weather0check.txt")).trim();
+
+        // Assert that all client responses contain the expected JSON
+        for (String response : clientResponses) {
+            System.err.println("Response: " + response);
+            Assert.assertTrue("Client did not receive the correct JSON", response.contains(expectedJson));
         }
     }
 
-     */
+
 
 
 }

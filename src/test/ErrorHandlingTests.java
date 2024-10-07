@@ -1,10 +1,10 @@
-package test;
 
-import main.AggregationServer;
-import main.ContentServer;
-import main.GETClient;
+import org.junit.Assert;
 import org.junit.Test;
 import static org.junit.Assert.*;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -12,21 +12,6 @@ import java.nio.file.Files;
 import java.util.logging.Logger;
 
 public class ErrorHandlingTests {
-    private static final Logger logger = Logger.getLogger(ErrorHandlingTests.class.getName());
-
-    // Helper method to start a server in a new thread
-    private Thread startServer(Runnable serverRunnable) {
-        Thread serverThread = new Thread(serverRunnable);
-        serverThread.start();
-        return serverThread;
-    }
-
-    // Helper method to check file content
-    private void assertFileContent(Path filePath, Path expectedFilePath) throws Exception {
-        String fileContent = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8).trim();
-        String expectedContent = new String(Files.readAllBytes(expectedFilePath), StandardCharsets.UTF_8).trim();
-        Assert.assertEquals("The stored data should match the expected JSON", expectedContent, fileContent);
-    }
 
     // Helper method to run a content server and return the instance
     private ContentServer runContentServer(String port, String filePath) {
@@ -47,9 +32,9 @@ public class ErrorHandlingTests {
         final StringBuilder clientResponse = new StringBuilder();
         Thread clientThread = new Thread(() -> {
             try {
-                // ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                // PrintStream ps = new PrintStream(baos);
-                // System.setOut(ps);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                PrintStream ps = new PrintStream(baos);
+                System.setOut(ps);
 
                 if (id.equals("null")) {
                     GETClient.main(new String[]{"localhost:" + port});
@@ -57,8 +42,8 @@ public class ErrorHandlingTests {
                     GETClient.main(new String[]{"localhost:" + port, id});
                 }
 
-                // clientResponse.append(baos.toString());
-                // System.setOut(System.out); // Reset System.out
+                clientResponse.append(baos.toString());
+                System.setOut(System.out); // Reset System.out
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -73,9 +58,19 @@ public class ErrorHandlingTests {
         return clientResponse.toString();
     }
 
+    // Helper function for starting the aggregation server and ensuring no errors.
+    private void waitForServerToStart() {
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+
     // Test that the GET client throws error when incorrect input format is provided
     @Test
-    public void testInvalidGet(){
+    public void testEmptyGet(){
         Thread serverThread = new Thread(() -> {
             try {
                 AggregationServer.main(new String[]{"1234"});
@@ -92,11 +87,13 @@ public class ErrorHandlingTests {
 
 
             String clientResponse = captureClientOutput("1234", "null"); // Server has no content so should receive an error
-            String expectedJson = "HTTP/1.1 404 Not Found";
+            String expectedJson = "No data in aggregation server";
+
+            System.err.println("Client Response" + clientResponse);
+            System.err.flush();
+
             Assert.assertTrue("Client did not receive error message", clientResponse.contains(expectedJson));
 
-            System.err.println(clientResponse);
-            logger.info("HELLO FUCK YOU");
 
 
             AggregationServer.shutdown();
@@ -111,7 +108,7 @@ public class ErrorHandlingTests {
     @Test
     public void testInvalidID(){
         String port = "1235";
-        String contentFilePath = "src/content/IDS60901.txt";
+        String contentFilePath = "src/main/content/IDS60901.txt";
         Path filePath = Paths.get(contentFilePath);
 
         Thread serverThread = new Thread(() -> {
@@ -141,9 +138,61 @@ public class ErrorHandlingTests {
         }
     }
 
-    // Test to make sure the Content server handles incorrect input
+    // Tests that if the aggregation server crashes and restarts, the data persists and is not lost.
+    @Test
+    public void testShutdownRecovery() {
+        String port = "1235";
+        String contentFilePath = "src/main/content/IDS60901.txt";
 
-    // Test to make sure the Content server does not upload a file which contains no ID
+        // Step 1: Start the aggregation server and remove any existing data
+        Thread serverThread = new Thread(() -> {
+            try {
+                AggregationServer.main(new String[]{port});
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+        serverThread.start();
+        AggregationServer.RemoveTextFiles();
+
+        // Step 2: Start the content server to provide data
+        ContentServer contentServer = runContentServer(port, contentFilePath);
+        waitForServerToStart();
+
+        try {
+            // Step 3: Shutdown the aggregation server
+            AggregationServer.shutdown();
+            serverThread.join();
+
+            // Step 4: Restart the aggregation server
+            serverThread = new Thread(() -> {
+                try {
+                    AggregationServer.main(new String[]{port});
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+            serverThread.start();
+            waitForServerToStart(); // Ensure the server has started fully
+
+            // Step 5: Send a GET request and check if the data is still there
+            String clientResponse = captureClientOutput(port, "IDS60901");
+            String expectedJson = new String(Files.readAllBytes(Paths.get("src/test/weather0check.txt")), StandardCharsets.UTF_8);
+
+            // Log the responses for debugging
+            System.err.println("Client Response: " + clientResponse);
+            System.err.println("Expected JSON: " + expectedJson);
+
+            // Step 6: Verify the data was persisted after the server restart
+            Assert.assertTrue("Client did not receive the correct data", clientResponse.contains(expectedJson));
+
+            // Step 7: Shutdown the server after the test
+            AggregationServer.shutdown();
+            serverThread.join();
+        } catch (Exception e) {
+            Assert.fail("Test failed: " + e.getMessage());
+        }
+    }
 
 
 

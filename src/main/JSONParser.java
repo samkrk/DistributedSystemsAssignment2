@@ -1,5 +1,3 @@
-package main;
-
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -20,7 +18,7 @@ public class JSONParser {
         // Parse the input into a Map
         Map<String, String> weatherData = parseInput(input);
 
-        // Convert the Map to a JSON string (manually)
+        // Manually convert the Map to a JSON string
         return convertToJSON(weatherData);
     }
 

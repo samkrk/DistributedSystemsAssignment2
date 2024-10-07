@@ -1,8 +1,5 @@
-package test;
 
-import main.AggregationServer;
-import main.ContentServer;
-import main.GETClient;
+import org.junit.Assert;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import java.nio.file.*;
@@ -117,17 +114,17 @@ public class MiscellaneousTests {
 
         try {
             Thread.sleep(500);
-            ContentServer contentServer1 = runContentServer("1234", "src/content/IDS60902.txt");
+            ContentServer contentServer1 = runContentServer("1234", "src/main/content/IDS60902.txt");
             Thread.sleep(500);
-            contentServer1.shutdown();
+            ContentServer.shutdown();
 
-            ContentServer contentServer2 = runContentServer("1234", "src/content/IDS60901.txt");
+            ContentServer contentServer2 = runContentServer("1234", "src/main/content/IDS60901.txt");
             Thread.sleep(500);
-            contentServer2.shutdown();
+            ContentServer.shutdown();
 
 
             String clientResponse = captureClientOutput("1234", "null");
-            String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather0check.txt")), StandardCharsets.UTF_8);
+            String expectedJson = new String(Files.readAllBytes(Paths.get("src/test/weather0check.txt")), StandardCharsets.UTF_8);
             Assert.assertTrue("Client did not receive correct JSON", clientResponse.contains(expectedJson));
 
             AggregationServer.shutdown();
@@ -143,7 +140,7 @@ public class MiscellaneousTests {
     @Test
     public void testOverwriteData() {
         String port = "1234";
-        String contentFilePath = "src/content/IDS60903.txt";
+        String contentFilePath = "src/main/content/IDS60903.txt";
         Path filePath = Paths.get(contentFilePath);
 
         // Start the aggregation server
@@ -164,14 +161,16 @@ public class MiscellaneousTests {
             // Save old data
             String OLD_DATA = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8);
             // New data to write
-            String NEW_DATA = new String(Files.readAllBytes(Paths.get("src/content/IDS60904.txt")), StandardCharsets.UTF_8);
+            String NEW_DATA = new String(Files.readAllBytes(Paths.get("src/main/content/IDS60904.txt")), StandardCharsets.UTF_8);
             overwriteFile(filePath, NEW_DATA); // Overwrite the file with new data
 
+            System.out.println("OLD DATA:" + OLD_DATA);
+            System.out.println("NEW DATA:" + NEW_DATA);
             Thread.sleep(1000); // Give the server a moment to process the new data
 
             // Capture the client output
             String clientResponse = captureClientOutput(port, "null");
-            String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather4check.txt")), StandardCharsets.UTF_8);
+            String expectedJson = new String(Files.readAllBytes(Paths.get("src/test/weather4check.txt")), StandardCharsets.UTF_8);
             // Assert that the received data matches the new data
             Assert.assertTrue("Client did not receive the expected JSON data", clientResponse.contains(expectedJson));
 
@@ -195,7 +194,7 @@ public class MiscellaneousTests {
     @Test
     public void testNoFileID(){
         String port = "1233";
-        String contentFilePath = "src/content/noID.txt";
+        String contentFilePath = "src/main/content/noID.txt";
         Path filePath = Paths.get(contentFilePath);
 
         // Start the aggregation server
@@ -206,6 +205,7 @@ public class MiscellaneousTests {
                 e.printStackTrace();
             }
         });
+        AggregationServer.RemoveTextFiles();
 
         // Start the content server
         ContentServer contentServer = runContentServer(port, contentFilePath);
@@ -215,12 +215,14 @@ public class MiscellaneousTests {
 
             // Client should recieve no data since the file was not accepted.
             String clientResponse = captureClientOutput(port, "null");
-            System.out.println("CLIENT RESPONSE CUNT: " + clientResponse);
             String expectedJson = "HTTP/1.1 404 Not Found";
+
+            System.err.println("Client Response: " + clientResponse);
+
             Assert.assertTrue("Client did not receive error message", clientResponse.contains(expectedJson));
 
             // Clean up
-            contentServer.shutdown(); // Make sure to shutdown the content server
+            ContentServer.shutdown(); // Make sure to shutdown the content server
             AggregationServer.shutdown(); // Make sure to shutdown the aggregation server
             serverThread.join(); // Wait for server thread to finish
 
@@ -229,5 +231,28 @@ public class MiscellaneousTests {
             Assert.fail("Test failed: " + e.getMessage());
         }
     }
+
+
+    // Tests that the client can retry on network errors.
+    @Test
+    public void testRetryOnError() throws InterruptedException {
+        String port = "1222";
+
+        try {
+            String clientResponse = captureClientOutput(port, "null");
+
+            String expectedJson = "Max retries reached. Unable to get data.";
+            System.err.println("Client Response: " + clientResponse);
+
+            Assert.assertTrue("Client response was incorrect", clientResponse.contains(expectedJson));
+
+
+            System.out.println("Test finished successfully.");
+        } catch (Exception e) {
+            Assert.fail("Test failed: " + e.getMessage());
+        }
+    }
+
+
 
 }

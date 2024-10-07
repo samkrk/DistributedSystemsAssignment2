@@ -1,5 +1,3 @@
-package main;
-
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
@@ -99,7 +97,10 @@ public class AggregationServer {
             String fileId = fileName.substring(0, fileName.indexOf('.')); // Assuming fileId is part of the file name
 
             Long lastContactTime = lastContactMap.get(fileId);
-            if (lastContactTime == null || lastContactTime < thresholdTime) {
+            if (lastContactTime == null){
+                lastContactMap.put(fileId, System.currentTimeMillis());
+            }
+            else if (lastContactTime < thresholdTime) {
                 // If no heartbeat has been received within the time limit, delete the file
                 try {
                     Files.delete(file);

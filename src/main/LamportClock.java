@@ -1,4 +1,3 @@
-package main;
 
 public class LamportClock {
     private int clock;

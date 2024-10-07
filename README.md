@@ -1,6 +1,6 @@
 
 # Distributed Systems Assignment 2 
-## Sam Kirk, a1851921
+## Sam Kirk - a1851921
 
 ---
 ## Overview 
@@ -12,11 +12,11 @@ The Aggregation server starts up, receives weather data in a JSON format from th
 
 Key features:
 * Supports an arbitrary port number.
-* Removes content servers that have not contacted the aggregation server in 30 seconds. 
-* Uses threads to process GET and PUT requests concurrently.
+* Removes data from content servers that have not contacted the aggregation server in the last 30 seconds. 
+* Uses multi-threading to process GET and PUT requests concurrently.
 * Makes use of lamport clocks to maintain ordering of events.
 * Robust error handling for network errors and invalid input. 
-* Can be shutdown by entering 'shutdown' in the terminal. 
+* Can be gracefully shutdown by entering 'shutdown' in the terminal. 
 
 ---
 ### Content Servers 
@@ -30,6 +30,7 @@ Key features:
 * Retries sending data to the aggregation server 3 times before giving up. 
 * Implements lamport clocks.
 * Can be shutdown gracefully by typing 'shutdown' into terminal. 
+* Changes in the source .txt file will be pushed automatically to the Aggregation Server.
 
 Note that each content server should be run in its own terminal. 
 
@@ -37,11 +38,11 @@ Note that each content server should be run in its own terminal.
 ### GET Clients 
 
 
-The GET Clients take either one or two parameters. The first parameter is the aggregation server name and port number, so the same as the Content Servers, and the second optional parameter is the file ID which corresponds to the weather data they want to view. A successful request will result in the weather data being printed in the terminal. In the case where no ID is specified, the client will receive the most recently added or updated data on the aggregation server. 
+The GET Client takes either one or two parameters. The first parameter is the aggregation server name and port number, (so the same as the Content Servers) and the second optional parameter is a file ID. Provided the Aggregation server is connected to a content server with the requested ID, a successful request will result in the weather data being printed in the terminal. In the case where no ID is specified, the client will receive the most recently added or updated data on the aggregation server. 
 
 Key features: 
 * Retries 3 times on failures.
-* Error handling for socket/network failures and argument errors. 
+* Error handling for socket/network failures, argument errors and empty Aggregation Servers. 
 * Prints JSON data directly to terminal. 
  
 --- 
@@ -67,20 +68,16 @@ make run-client SERVER_ADDR=localhost PORT=4567 ID=IDS60901
 ```
 --- 
 ## Automated Testing 
-The automated testing is done using JUnit. There are multiple test files which test separate parts/features of the design. 
+The automated testing is done using JUnit 4. There are multiple test files which test separate parts/features of the design. 
 * The _IntegrationTests.java_ file tests the basic functionality of the application, ensuring the Aggregation server can start up and shut down, receive files from Content Servers, and process GET requests from clients. 
-* The _ErrorHandlingTests.java_ file looks at how the application handles different types of errors, ensuring that all important errors are handled gracefully, and the servers can still operate despite failures. 
-* The _EdgeCaseTests.java_ file looks at some interesting edge cases that the servers may have to deal with, and makes sure that everything runs smoothly. 
-* Finally, the _MiscellaneousTests.java_ file tests some of the miscellaneous features implemented in the design, such as what happens when a content servers text file is edited, or what happens when a client sends a GET request with no ID. 
+* The _ErrorHandlingTests.java_ file looks at how the application handles different types of errors, ensuring that all important errors are handled gracefully, and the servers can still operate despite failures.
+* Finally, the _MiscellaneousTests.java_ file tests some edge cases as well as some of the miscellaneous features implemented in the design, such as what happens when a content servers text file is edited, or what happens when a client sends a GET request with no ID. 
 
-See the TestsREADME.md file for more information regarding all the tests and their details. 
+See the TestsREADME.md file for a full summary of the all the implemented tests.
 
 To run each of these test files, run the commands;
 ``` bash
 make run-integration-tests
-```
-``` bash
-make run-edge-tests
 ```
 ``` bash
 make run-error-tests
