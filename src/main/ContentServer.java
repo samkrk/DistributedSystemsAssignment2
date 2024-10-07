@@ -1,3 +1,5 @@
+package main;
+
 import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
@@ -112,6 +114,10 @@ public class ContentServer {
             }
             scanner.close();
         }).start();
+    }
+
+    public static void shutdown(){
+        running = false;
     }
 
     /**

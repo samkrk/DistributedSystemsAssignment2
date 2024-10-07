@@ -1,3 +1,8 @@
+package test;
+
+import main.AggregationServer;
+import main.ContentServer;
+import main.GETClient;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import java.nio.file.*;
@@ -18,7 +23,7 @@ public class AggregationServerTest {
     private void assertFileContent(Path filePath, Path expectedFilePath) throws Exception {
         String fileContent = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8).trim();
         String expectedContent = new String(Files.readAllBytes(expectedFilePath), StandardCharsets.UTF_8).trim();
-        assertEquals("The stored data should match the expected JSON", expectedContent, fileContent);
+        Assert.assertEquals("The stored data should match the expected JSON", expectedContent, fileContent);
     }
 
     // Helper method to run a content server
@@ -72,11 +77,11 @@ public class AggregationServerTest {
 
         try {
             Thread.sleep(100);
-            assertEquals("Server should be started on port 4567", 4567, AggregationServer.getPort());
+            Assert.assertEquals("Server should be started on port 4567", 4567, AggregationServer.getPort());
             AggregationServer.shutdown();
             serverThread.join();
         } catch (Exception e) {
-            fail("Server startup failed: " + e.getMessage());
+            Assert.fail("Server startup failed: " + e.getMessage());
         }
     }
 
@@ -98,13 +103,13 @@ public class AggregationServerTest {
             ContentServer.shutdown();
             contentThread.join();
 
-            assertTrue("The JSON file should be created", Files.exists(Paths.get("src/aggr_data/IDS60901.json")));
+            Assert.assertTrue("The JSON file should be created", Files.exists(Paths.get("src/aggr_data/IDS60901.json")));
             assertFileContent(Paths.get("src/aggr_data/IDS60901.json"), Paths.get("tests/weather0check.txt"));
 
             AggregationServer.shutdown();
             serverThread.join();
         } catch (Exception e) {
-            fail("Test failed: " + e.getMessage());
+            Assert.fail("Test failed: " + e.getMessage());
         }
     }
 
@@ -128,12 +133,12 @@ public class AggregationServerTest {
 
             String clientResponse = captureClientOutput("1234", "IDS60901");
             String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather0check.txt")), StandardCharsets.UTF_8);
-            assertTrue("Client did not receive correct JSON", clientResponse.contains(expectedJson));
+            Assert.assertTrue("Client did not receive correct JSON", clientResponse.contains(expectedJson));
 
             AggregationServer.shutdown();
             serverThread.join();
         } catch (Exception e) {
-            fail("Test failed: " + e.getMessage());
+            Assert.fail("Test failed: " + e.getMessage());
         }
     }
 
@@ -157,12 +162,12 @@ public class AggregationServerTest {
 
             String clientResponse = captureClientOutput("1234", "IDS60901");
             String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather0check.txt")), StandardCharsets.UTF_8);
-            assertTrue("Client did not receive correct JSON", clientResponse.contains(expectedJson));
+            Assert.assertTrue("Client did not receive correct JSON", clientResponse.contains(expectedJson));
 
             AggregationServer.shutdown();
             serverThread.join();
         } catch (Exception e) {
-            fail("Test failed: " + e.getMessage());
+            Assert.fail("Test failed: " + e.getMessage());
         }
     }
 }

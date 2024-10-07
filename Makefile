@@ -3,17 +3,19 @@ JAVAC=javac
 JAVA=java
 SRC=src
 BIN=bin
-TEST=tests
+TEST=Test
 LIB=lib
+MAIN = $(SRC)/main
+
 
 # Compile the Java files
 compile:
 	mkdir -p $(BIN)
-	$(JAVAC) -d $(BIN) $(SRC)/*.java
+	$(JAVAC) -d $(BIN) $(SRC)/main/*.java
 
 # Run the aggregation server with an optional port argument (default: 4567)
 run-server:
-	$(JAVA) -cp $(BIN) AggregationServer $(PORT)
+	$(JAVA) -cp $(BIN) main.AggregationServer $(PORT)
 
 # Run the content server with arguments for server address, port, and directory
 # Example: make run-content SERVER_ADDR=localhost PORT=4567 DIR=src/content/IDS60901.txt
@@ -53,10 +55,10 @@ clean:
 
 ### HARD CODED EXAMPLES FOR EASE OF USE ###
 _run-content:
-	$(JAVA) -cp $(BIN) ContentServer localhost:4567 src/content/IDS60901.txt
+	$(JAVA) -cp $(BIN) ContentServer localhost:4567 src/main/content/noID.txt
 
 _run-client:
 	$(JAVA) -cp $(BIN) GETClient localhost:4567 IDS60901
 
 _run-content2:
-	$(JAVA) -cp $(BIN) ContentServer localhost:4567 src/content/IDS60902.txt
+	$(JAVA) -cp $(BIN) ContentServer localhost:4567 src/main/content/IDS60902.txt

@@ -1,10 +1,17 @@
+package test;
+
+import main.AggregationServer;
+import main.ContentServer;
+import main.GETClient;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayOutputStream;
-import java.io.ByteArrayInputStream;
 import java.io.PrintStream;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.Path;
+import java.nio.file.Files;
 
 public class temp {
     // Helper method to start a server in a new thread
@@ -18,7 +25,7 @@ public class temp {
     private void assertFileContent(Path filePath, Path expectedFilePath) throws Exception {
         String fileContent = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8).trim();
         String expectedContent = new String(Files.readAllBytes(expectedFilePath), StandardCharsets.UTF_8).trim();
-        assertEquals("The stored data should match the expected JSON", expectedContent, fileContent);
+        Assert.assertEquals("The stored data should match the expected JSON", expectedContent, fileContent);
     }
 
     // Helper method to run a content server and return the instance
@@ -68,13 +75,15 @@ public class temp {
 
     // Method to overwrite a file with new data
     private void overwriteFile(Path filePath, String newData) throws Exception {
-        Files.write(filePath, newData.getBytes(StandardCharsets.UTF_8), StandardOpenOption.WRITE);
+        // Files.write(filePath, newData.getBytes(StandardCharsets.UTF_8), StandardOpenOption.WRITE);
+        Files.writeString(filePath, newData, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
+    // Tests that the aggregation server does not accept a file with no ID.
     @Test
-    public void testOverwriteData() {
-        String port = "1234";
-        String contentFilePath = "src/content/IDS60903.txt"; // Change to your actual file path
+    public void testNoFileID() {
+        String port = "1233";
+        String contentFilePath = "src/content/noID.txt";
         Path filePath = Paths.get(contentFilePath);
 
         // Start the aggregation server
@@ -89,47 +98,35 @@ public class temp {
         // Start the content server
         ContentServer contentServer = runContentServer(port, contentFilePath);
 
-        String OLD_DATA = ""; // To store old data
         try {
-            Thread.sleep(5000); // Wait for servers to start
+            Thread.sleep(1000); // Increase wait time for servers to start
 
-            // Save old data
-            OLD_DATA = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8);
-            System.out.println("Old Data: " + OLD_DATA); // Debug statement for old data
+            // Capture output
+            PrintStream originalOut = System.out;
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            PrintStream ps = new PrintStream(baos);
+            System.setOut(ps);
 
-            // New data to write
-            String NEW_DATA = new String(Files.readAllBytes(Paths.get("src/content/IDS60904.txt")), StandardCharsets.UTF_8);
-            System.out.println("New Data: " + NEW_DATA); // Debug statement for new data
-
-            overwriteFile(filePath, NEW_DATA); // Overwrite the file with new data
-            System.out.println("File overwritten with new data."); // Debug statement for file overwrite
-
-            Thread.sleep(5000); // Give the server more time to process the new data
-
-            // Capture the client output
+            // Client should receive no data since the file was not accepted
             String clientResponse = captureClientOutput(port, "null");
-            String expectedJson = new String(Files.readAllBytes(Paths.get("tests/weather4check.txt")), StandardCharsets.UTF_8);
+            System.err.println("CLIENT RESPONSE: " + clientResponse);
 
-            System.out.println("Expected JSON: " + expectedJson); // Debug statement for expected JSON
-            System.out.println("Client Response: " + clientResponse); // Debug statement for client response
+            System.err.flush(); // Ensure output is flushed
+            String capturedOutput = baos.toString();
+            System.err.println("Captured output: " + capturedOutput);
 
-            // Assert that the received data matches the new data
-            assertTrue("Client did not receive the expected JSON data", clientResponse.contains(expectedJson));
+            Assert.assertTrue("Client did not receive error message", clientResponse.contains("HTTP/1.1 404 Not Found"));
 
-        } catch (Exception e) {
-            fail("Test failed: " + e.getMessage());
-        } finally {
+            // Restore original System.err
+            System.setOut(originalOut);
+            System.out.println("Test finished successfully.");
+
             // Clean up
             contentServer.shutdown(); // Make sure to shutdown the content server
             AggregationServer.shutdown(); // Make sure to shutdown the aggregation server
-            try {
-                serverThread.join(); // Wait for server thread to finish
-                // Reset IDS60903.txt back to what it was.
-                overwriteFile(filePath, OLD_DATA); // Overwrite the file with old data
-                System.out.println("File reset to old data."); // Debug statement for file reset
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            serverThread.join(); // Wait for server thread to finish
+        } catch (Exception e) {
+            Assert.fail("Test failed: " + e.getMessage());
         }
     }
 

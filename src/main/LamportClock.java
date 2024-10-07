@@ -1,4 +1,6 @@
-class LamportClock {
+package main;
+
+public class LamportClock {
     private int clock;
 
     public LamportClock() {

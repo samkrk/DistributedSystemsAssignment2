@@ -8,7 +8,8 @@ This document outlines and explains the implemented tests.
 
 
 ## Error Handling Tests 
-
+1. testInvalidGet() - Tests that when a client requests a file that doesn't exist, a 404 error is thrown. 
+2. 
 
 ## Edge Case Tests 
 
@@ -17,6 +18,8 @@ This document outlines and explains the implemented tests.
 1. testPortNumber() - Checks that the aggregation server can accept an input for a port number and start a socket on the given port.
 2. testMostRecent() - When a client sends a GET request with no ID, they correctly receive the most recent data. Two content servers send their data to the aggregation server. The second server sends its data half a second later, so the client should receive this content servers data. 
 3. testFileEdit() - Editing a content servers file automatically re-uploads the data to the aggregation server
-   // Tests that when a content servers data is changed, the new file is automatically sent to the Aggregation server
+   NOT WORKING 
+4. testNoFileID() - Ensures that when a content server tries to send a file with no ID, the server does not accept the file. 
+
 
 

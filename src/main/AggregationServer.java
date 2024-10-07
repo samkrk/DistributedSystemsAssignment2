@@ -1,17 +1,14 @@
+package main;
+
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.Path;
 import java.nio.file.Files;
-import java.nio.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -22,9 +19,16 @@ public class AggregationServer {
     private static ExecutorService threadPool;
     public static int port;
     public static final Map<String, Long> lastContactMap = new ConcurrentHashMap<>();
-    public static final long INACTIVITY_THRESHOLD = 30000; // 30 seconds
 
-
+    /**
+     * Main method to start the Aggregation Server.
+     *
+     * This method initializes the server by setting up the Lamport clock,
+     * starting the shutdown listener, and setting up the server socket.
+     * It also initiates the cleanup thread for old files and listens for client connections.
+     *
+     * @param args Command-line arguments, where the first argument is the server port (optional).
+     */
     public static void main(String[] args){
         startUp(args);
         startFileCleanupThread(); // start clean up
@@ -32,6 +36,13 @@ public class AggregationServer {
         listen(serverSocket);
     }
 
+    /**
+     * Initializes the server, setting up the Lamport clock,
+     * fetching the port number, starting the shutdown listener,
+     * and initializing the server socket and thread pool.
+     *
+     * @param args Command-line arguments containing the server port number.
+     */
     public static void startUp(String[] args){
         System.out.println("Server is starting up...");
         lamportClock = new LamportClock();  // Starts with clock = 0
@@ -41,6 +52,14 @@ public class AggregationServer {
         threadPool = Executors.newCachedThreadPool();  // Use a thread pool to manage clients
     }
 
+    /**
+     * Retrieves the port number from the command-line arguments.
+     *
+     * If no port is provided or an invalid port is specified, it defaults to 4567.
+     *
+     * @param args Command-line arguments.
+     * @return The port number to be used by the server.
+     */
     public static int getPortNumber(String[] args) {
         if (args.length > 0) {
             try {
@@ -52,12 +71,27 @@ public class AggregationServer {
         return 4567; // Default port number
     }
 
+    /**
+     * Returns the current port number of the server.
+     * Used in testing.
+     *
+     * @return The port number the server is running on.
+     */
     public static int getPort(){
         return port;
     }
 
+    /**
+     * Deletes old files that have not received a heartbeat signal within the specified time limit.
+     *
+     * This method checks the files in the "aggr_data" directory and removes those
+     * that haven't been updated within the given threshold.
+     *
+     * @param timeLimitInSeconds The inactivity time limit in seconds.
+     * @throws IOException If an I/O error occurs during file deletion.
+     */
     public static void cleanUpFiles(long timeLimitInSeconds) throws IOException {
-        Path directory = Paths.get("src/aggr_data");
+        Path directory = Paths.get("src/main/aggr_data");
         long thresholdTime = System.currentTimeMillis() - TimeUnit.SECONDS.toMillis(timeLimitInSeconds);
 
         Files.list(directory).forEach(file -> {
@@ -79,6 +113,12 @@ public class AggregationServer {
         });
     }
 
+    /**
+     * Starts a background thread to periodically clean up inactive files.
+     *
+     * The cleanup thread runs every 30 seconds to delete files that have not been
+     * updated within the inactivity threshold.
+     */
     public static void startFileCleanupThread() {
         new Thread(() -> {
             while (running) {
@@ -92,6 +132,11 @@ public class AggregationServer {
         }).start();
     }
 
+    /**
+     * Initializes the server socket and starts listening for client connections on the specified port.
+     *
+     * @param port The port number to bind the server socket to.
+     */
     public static void startSocket(int port) {
         try {
             serverSocket = new ServerSocket(port);
@@ -102,6 +147,14 @@ public class AggregationServer {
         }
     }
 
+    /**
+     * Listens for incoming client connections and assigns each connection to a new thread.
+     *
+     * This method runs in an infinite loop, accepting client connections and
+     * delegating the handling of each client to a thread from the thread pool.
+     *
+     * @param serverSocket The server socket on which to listen for connections.
+     */
     public static void listen(ServerSocket serverSocket) {
         if (serverSocket == null) {
             return; // Don't proceed if serverSocket wasn't created
@@ -124,7 +177,12 @@ public class AggregationServer {
         }
     }
 
-    // Start a shutdown listener to wait for the "shutdown" command
+    /**
+     * Starts a background thread to listen for the "shutdown" command from the terminal.
+     *
+     * This method monitors the terminal for a "shutdown" command and, once detected,
+     * triggers the graceful shutdown of the server.
+     */
     private static void startShutdownListener() {
         new Thread(() -> {
             Scanner scanner = new Scanner(System.in);
@@ -139,7 +197,12 @@ public class AggregationServer {
         }).start();
     }
 
-    // Gracefully shut down the server
+    /**
+     * Gracefully shuts down the server by stopping new client connections and terminating all threads.
+     *
+     * This method closes the server socket and shuts down the thread pool, ensuring
+     * that all active client handler threads are terminated.
+     */
     public static void shutdown() {
         System.out.println("Shutting down the server...");
         running = false;
@@ -162,8 +225,46 @@ public class AggregationServer {
         System.out.println("Server has been shut down.");
     }
 
+    /**
+     * Returns the current value of the Lamport clock.
+     * Used in testing.
+     *
+     * @return The current clock value.
+     */
     public static int getClock(){
         return lamportClock.getClock();
+    }
+
+    /**
+     * Clears all the data stored in the Aggregation Server.
+     * Used in testing.
+     */
+    public static void RemoveTextFiles() {
+        // Specify the directory path
+        String directoryPath = "src/main/aggr_data";
+
+        // Create a File object for the directory
+        File folder = new File(directoryPath);
+
+        // List all files in the directory
+        File[] files = folder.listFiles();
+
+        if (files != null) {
+            for (File file : files) {
+                // Check if the file ends with .txt
+                if (file.isFile() && file.getName().endsWith(".json")) {
+                    // Delete the file
+                    boolean deleted = file.delete();
+                    if (deleted) {
+                        System.out.println(file.getName() + " was deleted.");
+                    } else {
+                        System.out.println("Failed to delete " + file.getName());
+                    }
+                }
+            }
+        } else {
+            System.out.println("The directory is empty or does not exist.");
+        }
     }
 
 
@@ -172,10 +273,27 @@ public class AggregationServer {
 
 class ClientHandler extends AggregationServer implements Runnable{
     private final Socket clientSocket;
+
+    /**
+     * ClientHandler handles client connections and processes their requests
+     * (PUT, GET, HEARTBEAT). It runs in its own thread, handling input and
+     * output streams from the client socket.
+     *
+     * @param clientSocket The socket connected to the client.
+     */
     public ClientHandler(Socket clientSocket) {
         this.clientSocket = clientSocket;
     }
 
+    /**
+     * This method runs the client handler. It reads the type of request
+     * from the client (PUT, GET, or HEARTBEAT), processes the request,
+     * and ensures proper synchronization with the server's Lamport clock.
+     *
+     * If the request type is invalid or empty, it closes the connection
+     * gracefully. It also ensures that the client socket is closed at the
+     * end of the request processing.
+     */
     @Override
     public void run() {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
@@ -193,16 +311,17 @@ class ClientHandler extends AggregationServer implements Runnable{
                 return; // Exit the handler gracefully
             }
 
-            if (requestType.equals("PUT")) {
-                System.out.println("Request type: PUT");
-                processPut(in, out);
-            } else if (requestType.equals("GET")) {
-                System.out.println("Request type: GET");
-                processGet(in, out);
-            } else if (requestType.equals("HEARTBEAT")) {
-                processHeartbeat(in, out);
-            } else {
-                out.println("HTTP/1.1 400 Invalid request type");
+            switch (requestType) {
+                case "PUT" -> {
+                    System.out.println("Request type: PUT");
+                    processPut(in, out);
+                }
+                case "GET" -> {
+                    System.out.println("Request type: GET");
+                    processGet(in, out);
+                }
+                case "HEARTBEAT" -> processHeartbeat(in, out);
+                default -> out.println("HTTP/1.1 400 Invalid request type");
             }
 
         } catch (IOException e) {
@@ -219,6 +338,16 @@ class ClientHandler extends AggregationServer implements Runnable{
         }
     }
 
+    /**
+     * Processes the PUT request sent by the client, which includes weather
+     * data to be stored on the server. It reads the client's Lamport clock
+     * value, updates the server's clock, and stores the weather data in a
+     * file named after the weather ID.
+     *
+     * @param in BufferedReader to read input from the client.
+     * @param out PrintWriter to send output back to the client.
+     * @throws IOException If an error occurs while reading input or writing output.
+     */
     public void processPut(BufferedReader in, PrintWriter out) throws IOException {
         // Read lamport clock value from content server
         String receivedClockString = in.readLine();
@@ -249,7 +378,7 @@ class ClientHandler extends AggregationServer implements Runnable{
 
         try {
             // Store the data in a file named after the weather ID
-            Path filePath = Paths.get("src/aggr_data/" + weatherID + ".json");
+            Path filePath = Paths.get("src/main/aggr_data/" + weatherID + ".json");
 
             long timestamp = System.currentTimeMillis(); // Use current time as the timestamp
             lastContactMap.put(weatherID, timestamp);
@@ -276,6 +405,16 @@ class ClientHandler extends AggregationServer implements Runnable{
         AggregationServer.lamportClock.increment(); // Increment clock after processing PUT
     }
 
+    /**
+     * Processes the GET request sent by the client, either retrieving the
+     * most recent weather data or data for a specific weather ID. It reads
+     * the client's Lamport clock value, updates the server's clock, and
+     * sends the appropriate weather data back to the client.
+     *
+     * @param in BufferedReader to read input from the client.
+     * @param out PrintWriter to send output back to the client.
+     * @throws IOException If an error occurs while reading input or writing output.
+     */
     public void processGet(BufferedReader in, PrintWriter out) throws IOException {
         // Read lamport clock value from content server
         String receivedClockString = in.readLine();
@@ -289,7 +428,7 @@ class ClientHandler extends AggregationServer implements Runnable{
 
         if (id.equals("MOST_RECENT")){ // Send the most recently updated weather file
             String most_recent_file = getMostRecentFileId();
-            Path filePath = Paths.get("src/aggr_data/" + most_recent_file + ".json");
+            Path filePath = Paths.get("src/main/aggr_data/" + most_recent_file + ".json");
             System.out.println(most_recent_file);
 
             String jsonResponse;
@@ -316,7 +455,7 @@ class ClientHandler extends AggregationServer implements Runnable{
             // Retrieve stored JSON data WITH ID
             System.out.println("Searching for ID: " + id);
 
-            Path filePath = Paths.get("src/aggr_data/" + id + ".json");
+            Path filePath = Paths.get("src/main/aggr_data/" + id + ".json");
             String jsonResponse;
 
             if (!Files.exists(filePath)){ // if we cant find this file
@@ -340,18 +479,16 @@ class ClientHandler extends AggregationServer implements Runnable{
         AggregationServer.lamportClock.increment(); // Increment clock after processing GET
     }
 
-    public static String getMostRecentFileId() {
-        if (lastContactMap.isEmpty()){
-            System.out.println("No files currently in aggregation server");
-            return "empty";
-        }
-        return lastContactMap.entrySet()
-                .stream()
-                .max(Map.Entry.comparingByValue()) // Get the entry with the highest contact time (most recent)
-                .map(Map.Entry::getKey) // Extract the key (fileId)
-                .orElse("empty"); // Return empty if the map is empty
-    }
-
+    /**
+     * Processes the HEARTBEAT request sent by the content server to update
+     * the last contact time of a weather station. It reads the weather
+     * station ID from the request and updates its timestamp in the
+     * lastContactMap.
+     *
+     * @param in BufferedReader to read input from the client.
+     * @param out PrintWriter to send output back to the client.
+     * @throws IOException If an error occurs while reading input or writing output.
+     */
     private void processHeartbeat(BufferedReader in, PrintWriter out) throws IOException {
         String filePath = in.readLine(); // Read the attached file ID
         int startIndex = filePath.lastIndexOf('/') + 1; // Start after the last '/'
@@ -367,6 +504,13 @@ class ClientHandler extends AggregationServer implements Runnable{
         System.out.println("Received heartbeat from " + fileId);
     }
 
+    /**
+     * Reads and returns the HTTP headers sent by the client in a request.
+     *
+     * @param in BufferedReader to read input from the client.
+     * @return A StringBuilder containing the request headers.
+     * @throws IOException If an error occurs while reading input.
+     */
     private StringBuilder readHeaders(BufferedReader in) throws IOException {
         StringBuilder responseHeaders = new StringBuilder();
         String line;
@@ -377,6 +521,13 @@ class ClientHandler extends AggregationServer implements Runnable{
         return responseHeaders;
     }
 
+    /**
+     * Reads and returns the JSON data sent by the client in a request.
+     *
+     * @param in BufferedReader to read input from the client.
+     * @return A string containing the JSON data.
+     * @throws IOException If an error occurs while reading input.
+     */
     private String readJson(BufferedReader in) throws IOException {
         StringBuilder jsonData = new StringBuilder();
         String line;
@@ -389,6 +540,12 @@ class ClientHandler extends AggregationServer implements Runnable{
         return jsonData.toString();
     }
 
+    /**
+     * Extracts the weather ID from the JSON data sent by the client.
+     *
+     * @param jsonString The JSON string containing the weather data.
+     * @return The extracted weather ID, or null if the ID is not found.
+     */
     private String getWeatherID(String jsonString){
         String weatherID = null;
         // Extract the weather ID from the JSON string
@@ -401,6 +558,24 @@ class ClientHandler extends AggregationServer implements Runnable{
             }
         }
         return weatherID;
+    }
+
+    /**
+     * Retrieves the ID of the most recent weather data file stored in the
+     * aggregation server, based on the last contact timestamp.
+     *
+     * @return The ID of the most recent weather file, or "empty" if no data is present.
+     */
+    public static String getMostRecentFileId() {
+        if (lastContactMap.isEmpty()){
+            System.out.println("No files currently in aggregation server");
+            return "empty";
+        }
+        return lastContactMap.entrySet()
+                .stream()
+                .max(Map.Entry.comparingByValue()) // Get the entry with the highest contact time (most recent)
+                .map(Map.Entry::getKey) // Extract the key (fileId)
+                .orElse("empty"); // Return empty if the map is empty
     }
 }
 
